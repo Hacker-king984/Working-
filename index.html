@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ramzan Live Timings</title>
+
+<style>
+body{
+margin:0;
+font-family:Arial, sans-serif;
+background:url('https://images.pexels.com/photos/3581366/pexels-photo-3581366.jpeg?auto=compress&cs=tinysrgb&w=1600') no-repeat center center fixed;
+background-size:cover;
+color:white;
+text-align:center;
+}
+.overlay{
+background:rgba(0,0,0,0.75);
+min-height:100vh;
+padding:20px;
+}
+h2{margin-bottom:10px;}
+button{
+padding:12px 20px;
+border:none;
+border-radius:6px;
+font-size:16px;
+cursor:pointer;
+background:#4CAF50;
+color:white;
+margin-top:10px;
+}
+#city{
+font-size:22px;
+color:#FFD700;
+margin-top:15px;
+}
+#date{
+margin-top:5px;
+font-size:18px;
+}
+#timingBox{
+margin-top:20px;
+background:rgba(0,0,0,0.5);
+padding:15px;
+border-radius:10px;
+max-width:600px;
+margin-left:auto;
+margin-right:auto;
+}
+.row{
+display:flex;
+justify-content:space-between;
+padding:10px;
+font-size:18px;
+border-bottom:1px solid rgba(255,255,255,0.2);
+}
+.footer{
+margin-top:20px;
+color:#FFD700;
+font-weight:bold;
+}
+</style>
+</head>
+
+<body>
+<div class="overlay">
+
+<h2>Ramzan Mubarak Live Timings</h2>
+
+<p>
+Hamy apky city ki sahi Ramzan Al Mubarak ki Sehri & Iftari timing ke liye
+location allow karein:
+</p>
+
+<button onclick="startLocation()">Allow Location</button>
+
+<div id="city">City: —</div>
+<div id="date"></div>
+<div id="timingBox"></div>
+
+<!-- ✅ YAHAN AUDIO CHANGE KI GAYI -->
+<audio id="alarmAudio" preload="auto">
+<source src="naat.mp3" type="audio/mpeg">
+</audio>
+
+<div class="footer">Created by Muhammad Jameer</div>
+
+</div>
+
+<script>
+
+let latGlobal, lonGlobal;
+
+function startLocation(){
+if(navigator.geolocation){
+navigator.geolocation.getCurrentPosition(success,error);
+}else{
+document.getElementById("city").innerText="Geolocation not supported.";
+}
+}
+
+function success(position){
+
+latGlobal = position.coords.latitude;
+lonGlobal = position.coords.longitude;
+
+fetchCity();
+fetchTimings();
+scheduleMidnightRefresh();
+}
+
+function fetchCity(){
+fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latGlobal}&longitude=${lonGlobal}&localityLanguage=en`)
+.then(res=>res.json())
+.then(data=>{
+document.getElementById("city").innerText="City: "+(data.city || data.locality || "Unknown");
+});
+}
+
+function fetchTimings(){
+
+let today=new Date();
+let date=today.getDate();
+let month=today.getMonth()+1;
+let year=today.getFullYear();
+
+document.getElementById("date").innerText=
+today.toDateString();
+
+fetch(`https://api.aladhan.com/v1/timings/${date}-${month}-${year}?latitude=${latGlobal}&longitude=${lonGlobal}&method=2`)
+.then(res=>res.json())
+.then(data=>{
+
+let t=data.data.timings;
+
+function convert12(time){
+let [h,m]=time.split(":");
+h=parseInt(h);
+let ampm=h>=12?"PM":"AM";
+h=h%12||12;
+return h+":"+m+" "+ampm;
+}
+
+// Sehri = Fajr -1 min
+let [fh,fm]=t.Fajr.split(":").map(Number);
+fm=fm-1;
+if(fm<0){fm=59;fh--;}
+if(fh<0)fh=23;
+let sehri=((fh%12)||12)+":"+(fm<10?"0"+fm:fm)+(fh>=12?" PM":" AM");
+
+let iftar=convert12(t.Maghrib);
+
+document.getElementById("timingBox").innerHTML=`
+<div class='row'><span>Sehri</span><span>${sehri}</span></div>
+<div class='row'><span>Fajr</span><span>${convert12(t.Fajr)}</span></div>
+<div class='row'><span>Dhuhr</span><span>${convert12(t.Dhuhr)}</span></div>
+<div class='row'><span>Asr</span><span>${convert12(t.Asr)}</span></div>
+<div class='row'><span>Iftar</span><span>${iftar}</span></div>
+<div class='row'><span>Isha</span><span>${convert12(t.Isha)}</span></div>
+`;
+
+setAlarm(sehri,"Sehri Time");
+setAlarm(iftar,"Iftar Time");
+
+});
+}
+
+function setAlarm(timeStr,label){
+
+let [h,mPart]=timeStr.split(":");
+let m=parseInt(mPart);
+let isPM=mPart.includes("PM");
+h=parseInt(h);
+
+if(isPM && h!=12) h+=12;
+if(!isPM && h==12) h=0;
+
+let now=new Date();
+let alarmTime=new Date();
+alarmTime.setHours(h,m,0,0);
+
+let diff=alarmTime-now;
+if(diff<0) diff+=86400000;
+
+setTimeout(()=>{
+document.getElementById("alarmAudio").play();
+alert(label);
+},diff);
+}
+
+function scheduleMidnightRefresh(){
+let now=new Date();
+let midnight=new Date();
+midnight.setHours(24,1,0,0);
+let diff=midnight-now;
+
+setTimeout(()=>{
+fetchTimings();
+scheduleMidnightRefresh();
+},diff);
+}
+
+function error(){
+document.getElementById("city").innerText="Location permission denied.";
+}
+
+</script>
+</body>
+  </html>
